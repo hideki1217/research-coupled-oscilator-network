@@ -1,3 +1,4 @@
+#include <BS_thread_pool.hpp>
 #include <boost/numeric/odeint.hpp>
 #include <iostream>
 #include <mine.hpp>
@@ -98,19 +99,71 @@ struct SymFluctuate {
   }
 };
 
+template <typename MCMC, typename Rng>
+void reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
+  auto unif = std::uniform_real_distribution(0., 1.);
+
+  for (int l = mode; l + 1 < repricas.size(); l += 2) {
+    const auto p = std::exp((repricas[l].beta - repricas[l + 1].beta) *
+                            (repricas[l].energy() - repricas[l + 1].energy()));
+    if (1 < p || unif(rng) < p) {
+      repricas[l].swap(repricas[l + 1]);
+    }
+  }
+}
+
 int main() {
   const double threshold = 0.9;
   const double T = 1000.;
   const double tol = 1e-7;
+  const int num_threads = 8;
+  const int period = 100;
+  const int burn_in = 10;
+  const int iteration = 1000;
+  std::vector<double> betas;
+  std::vector<double> scales;
 
+  std::mt19937 rng(20);
   network_t initial;
   {
     for (int i = 0; i < N * N; i++) initial[i] = 5. / N;
     for (int i = 0; i < N; i++) initial[i * N + i] = 0;
   }
-  auto mcmc = research::Metropolice(Hamiltonian(threshold, T, tol),
-                                    SymFluctuate(1.0), initial, 1.0);
-  for (int i = 0; i < 100; i++) {
-    const auto res = mcmc.update();
+  std::vector<research::Metropolice_<network_t>> mcmcs;
+  for (int i = 0; i < betas.size(); i++) {
+    mcmcs.emplace_back(research::Metropolice(Hamiltonian(threshold, T, tol),
+                                             SymFluctuate(scales[i]), initial,
+                                             betas[i], rng()));
+  }
+
+  BS::thread_pool pool(num_threads);
+
+  // Burn-In
+  for (int e = 0; e < burn_in; e++) {
+    pool.submit_loop<int>(0, mcmcs.size(),
+                          [&](const int l) {
+                            auto& mcmc = mcmcs[l];
+                            for (int j = 0; j < period; j++) {
+                              mcmc.update();
+                            }
+                          })
+        .wait();
+
+    reprica_swap(e % 2 == 0, mcmcs, rng);
+  }
+
+  // Sampling
+  for (int e = 0; e < iteration; e++) {
+    pool.submit_loop<int>(0, mcmcs.size(),
+                          [&](const int l) {
+                            auto& mcmc = mcmcs[l];
+                            for (int j = 0; j < period; j++) {
+                              mcmc.update();
+                            }
+                          })
+        .wait();
+
+    // swap phase
+    reprica_swap(e % 2 == 0, mcmcs, rng);
   }
 }
