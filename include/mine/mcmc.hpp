@@ -10,6 +10,7 @@ struct Metropolice_ {
   using rng_t = std::mt19937;
   using state_t = State;
   using hamiltonian_t = std::function<double(const state_t&, rng_t&)>;
+  using fluctuate_t = std::function<std::function<void()>(state_t&, rng_t&)>;
 
  public:
   enum class Result {
@@ -25,13 +26,15 @@ struct Metropolice_ {
   double _E;
   rng_t rng;
   hamiltonian_t H;
+  fluctuate_t fluctuate;
 
  public:
-  Metropolice_(hamiltonian_t H, const state_t& initial, double beta, int seed)
+  Metropolice_(hamiltonian_t H, fluctuate_t fluctuate, const state_t& initial, double beta, int seed)
       : rng(seed),
         _state(std::make_unique<state_t>(initial)),
         beta(beta),
-        H(H) {
+        H(H),
+        fluctuate(fluctuate) {
     _E = H(*_state, rng);
   }
 
@@ -66,7 +69,7 @@ struct Metropolice_ {
     return unif(rng);
   }
 
-  auto fluctuate(state_t& state, rng_t& rng) {
+  std::function<void()> _fluctuate(state_t& state, rng_t& rng) {
     std::normal_distribution normal(0., 1.);
     std::uniform_int_distribution indexer(0, int(state.size() - 1));
 
@@ -82,8 +85,9 @@ struct Metropolice_ {
 
 template <typename State>
 Metropolice_<State> Metropolice(typename Metropolice_<State>::hamiltonian_t H,
+                                typename Metropolice_<State>::fluctuate_t fluctuate,
                                 const State& initial, double beta,
                                 int seed = 20) {
-  return Metropolice_(H, initial, beta);
+  return Metropolice_(H, fluctuate, initial, beta, seed);
 }
 }  // namespace research

@@ -4,7 +4,7 @@
 #include <fstream>
 
 namespace research {
-template <typename State = system_t::state_t>
+template <typename State>
 struct _sv_observer_t {
 public:
   using state = State;
@@ -22,13 +22,16 @@ public:
     fout << std::endl;
   }
 };
+template <typename State>
 auto csv_observer_t = [](const std::string& file_name) {
-  return _sv_observer_t(file_name, ",");
+  return _sv_observer_t<State>(file_name, ",");
 };
+template <typename State>
 auto ssv_observer_t = [](const std::string& file_name) {
-  return _sv_observer_t(file_name, " ");
+  return _sv_observer_t<State>(file_name, " ");
 };
+template <typename State>
 auto tsv_observer_t = [](const std::string& file_name) {
-  return _sv_observer_t(file_name, "\t");
+  return _sv_observer_t<State>(file_name, "\t");
 };
 }  // namespace research

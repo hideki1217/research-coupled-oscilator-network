@@ -4,9 +4,11 @@
 #include "system.hpp"
 
 namespace research {
+template<typename System>
 struct phase_order_observer_t {
  public:
-  using target_t = system_t;
+  using target_t = System;
+  using state_t = typename System::state_t;
 
  private:
   double m_cos;
@@ -17,7 +19,7 @@ struct phase_order_observer_t {
   phase_order_observer_t() : m_cos(0), m_sin(0), count(0) {}
 
  public:
-  void operator()(const target_t::state_t& x, double t) {
+  void operator()(const state_t& x, double t) {
     double cos = 0;
     double sin = 0;
     {
