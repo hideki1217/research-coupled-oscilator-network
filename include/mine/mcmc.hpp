@@ -42,7 +42,6 @@ struct Metropolice_ {
   double energy() { return _E; }
 
   void swap(Metropolice_<state_t>& other) {
-    assert(H == other.H);
     _state.swap(other._state);
     std::swap(_E, other._E);
   }

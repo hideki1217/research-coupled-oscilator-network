@@ -34,6 +34,8 @@ struct Hamiltonian {
     if (is_first) {
       std::uniform_real_distribution unif(0., 2 * PI);
       for (int i = 0; i < N; i++) state[i] = unif(rng);
+
+      is_first = false;
     }
 
     // Burn-In
