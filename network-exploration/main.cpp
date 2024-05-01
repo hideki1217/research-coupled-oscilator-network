@@ -99,12 +99,16 @@ struct SymFluctuate {
 };
 
 int main() {
+  const double threshold = 0.9;
+  const double T = 1000.;
+  const double tol = 1e-7;
+
   network_t initial;
   {
     for (int i = 0; i < N * N; i++) initial[i] = 5. / N;
     for (int i = 0; i < N; i++) initial[i * N + i] = 0;
   }
-  auto mcmc = research::Metropolice(Hamiltonian(0.9, 1000., 1e-4),
+  auto mcmc = research::Metropolice(Hamiltonian(threshold, T, tol),
                                     SymFluctuate(1.0), initial, 1.0);
   for (int i = 0; i < 100; i++) {
     const auto res = mcmc.update();
