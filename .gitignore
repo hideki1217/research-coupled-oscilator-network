@@ -1,0 +1,11 @@
+_build
+external
+.vscode
+venv
+.env
+
+local_*.sh
+
+*.ssv
+*.png
+*.log
