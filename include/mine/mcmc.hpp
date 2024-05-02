@@ -29,7 +29,8 @@ struct Metropolice_ {
   fluctuate_t fluctuate;
 
  public:
-  Metropolice_(hamiltonian_t H, fluctuate_t fluctuate, const state_t& initial, double beta, int seed)
+  Metropolice_(hamiltonian_t H, fluctuate_t fluctuate, const state_t& initial,
+               double beta, int seed)
       : rng(seed),
         _state(std::make_unique<state_t>(initial)),
         beta(beta),
@@ -38,7 +39,7 @@ struct Metropolice_ {
     _E = H(*_state, rng);
   }
 
-  const state_t& state() { return _state; }
+  const state_t& state() { return *_state; }
   double energy() { return _E; }
 
   void swap(Metropolice_<state_t>& other) {
@@ -50,7 +51,7 @@ struct Metropolice_ {
     auto rebert = fluctuate(*_state, rng);
     const auto E = H(*_state, rng);
 
-    const auto p = std::exp(-beta * (E - _E));
+    const auto p = (std::isinf(E)) ? 0 : std::exp(-beta * (E - _E));
     if (1 < p || random_p(rng) < p) {
       _E = E;
 
@@ -83,10 +84,10 @@ struct Metropolice_ {
 };
 
 template <typename State>
-Metropolice_<State> Metropolice(typename Metropolice_<State>::hamiltonian_t H,
-                                typename Metropolice_<State>::fluctuate_t fluctuate,
-                                const State& initial, double beta,
-                                int seed = 20) {
+Metropolice_<State> Metropolice(
+    typename Metropolice_<State>::hamiltonian_t H,
+    typename Metropolice_<State>::fluctuate_t fluctuate, const State& initial,
+    double beta, int seed = 20) {
   return Metropolice_(H, fluctuate, initial, beta, seed);
 }
 }  // namespace research
