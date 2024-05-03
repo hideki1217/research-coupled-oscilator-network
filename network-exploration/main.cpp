@@ -138,7 +138,8 @@ auto parse_args(int argc, const char** argv) {
         continue;
       }
 
-      cur += 1;
+      std::cout << "Invalid arguments" << std::endl;
+      std::exit(1);
     }
   }
 
