@@ -1,3 +1,5 @@
+#include <iomanip>
+
 #include "order.hpp"
 
 int main() {
@@ -5,14 +7,39 @@ int main() {
   std::uniform_real_distribution unif(0., 2 * PI);
 
   network_t K;
+  std::cout << "Input network (" << N << "x" << N << ")" << std::endl << "> ";
   for (int i = 0; i < K.size(); i++) std::cin >> K[i];
 
-  std::vector<double> Ts = {500., 1000., 2000., 4000, 8000};
+  std::vector<double> Ts = {100., 1000., 10000.};
   for (auto T : Ts) {
-    auto H = Hamiltonian(0.9, T, 1e-7);
-    for (auto& x : H.state) {
+    auto observer = coarse_grained_system_t(T, 1e-7);
+    for (auto& x : observer.state) {
       x = unif(rng);
     }
-    std::cout << T << ": " << H.phase_order(K) << std::endl;
+
+    observer.set_network(K);
+    observer.burn_in();
+    std::vector<double> results;
+    for (int i=0; i<5; i++) {
+      results.push_back(observer.phase_order());
+    }
+
+    double mean, var;
+    {
+      mean = var = 0;
+      for (auto& res : results) {
+        mean += res;
+        var += res * res;
+      }
+      mean /= results.size();
+      var = var / results.size() - mean * mean;
+    }
+
+    std::cout << std::scientific << std::setprecision(4);
+    std::cout << T << ": ";
+    for (auto res : results) {
+      std::cout << res << " ";
+    }
+    std::cout << "> " << mean << " ± √" << var << std::endl;
   }
 }

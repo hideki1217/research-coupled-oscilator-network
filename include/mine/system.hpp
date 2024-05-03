@@ -21,6 +21,10 @@ struct system_t {
     std::copy_n(_w, N, w.begin());
     std::copy_n(_K, N * N, K.begin());
   }
+  system_t() {
+    std::fill(w.begin(), w.end(), double(0));
+    std::fill(K.begin(), K.end(), double(0));
+  }
 
   void operator()(const state_t& x, state_t& dx, double t) {
     f(&x[0], &dx[0], t);

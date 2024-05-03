@@ -5,6 +5,31 @@
 
 #include "order.hpp"
 
+struct Hamiltonian {
+ public:
+  const double threshold;
+  coarse_grained_system_t system;
+
+ private:
+  int eval_count{0};
+
+ public:
+  Hamiltonian(double threshold, double T, double tol)
+      : threshold(threshold), system(T, tol) {}
+  double operator()(const network_t& K, std::mt19937& rng) {
+    if ((eval_count++) == 0) system.set_random_state(rng);
+    system.set_network(K);
+    system.burn_in();
+    auto order = system.phase_order();
+
+    if (order < threshold) {
+      return std::numeric_limits<double>::infinity();
+    } else {
+      return std::reduce(K.cbegin(), K.cend()) / N;
+    }
+  }
+};
+
 struct SymFluctuate {
  public:
   const double scale;
