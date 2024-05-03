@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 project(research-network-exploration)
 
+enable_testing()
+
 # Compiler settings
 set(CMAKE_CXX_STANDARD 17)
 
@@ -16,7 +18,6 @@ target_include_directories(thread_pool INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/ext
 # Owned library
 add_library(mine INTERFACE)
 target_include_directories(mine INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_compile_definitions(mine INTERFACE MINE_UNIT_N=${MINE_UNIT_N})
 
 # Sub projects
 add_subdirectory(network-exploration)

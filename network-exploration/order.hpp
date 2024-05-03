@@ -28,7 +28,7 @@ struct coarse_grained_system_t {
     for (int i = 0; i < N; i++) system.w[i] /= system.w[N - 1];
   }
 
-  template<typename Rng>
+  template <typename Rng>
   void set_random_state(Rng& rng) {
     std::uniform_real_distribution unif(0., 2 * PI);
     for (int i = 0; i < N; i++) state[i] = unif(rng);
@@ -49,5 +49,21 @@ struct coarse_grained_system_t {
     boost::numeric::odeint::integrate_const(stepper, system, state, T, 2 * T,
                                             1.0, std::ref(observer));
     return observer.value();
+  }
+};
+
+struct PhaseOrder {
+ private:
+  coarse_grained_system_t system;
+  int eval_count{0};
+
+ public:
+  PhaseOrder(double T, double tol) : system(T, tol) {}
+  static PhaseOrder _default() { return PhaseOrder(1000., 1e-7); }
+  auto operator()(const network_t& K, std::mt19937& rng) {
+    if ((eval_count++) == 0) system.set_random_state(rng);
+    system.set_network(K);
+    system.burn_in();
+    return system.phase_order();
   }
 };

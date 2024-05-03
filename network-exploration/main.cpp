@@ -8,19 +8,15 @@
 struct Hamiltonian {
  public:
   const double threshold;
-  coarse_grained_system_t system;
 
  private:
-  int eval_count{0};
+  PhaseOrder order_evaluator;
 
  public:
-  Hamiltonian(double threshold, double T, double tol)
-      : threshold(threshold), system(T, tol) {}
+  Hamiltonian(double threshold, PhaseOrder&& order_evaluator)
+      : threshold(threshold), order_evaluator(order_evaluator) {}
   double operator()(const network_t& K, std::mt19937& rng) {
-    if ((eval_count++) == 0) system.set_random_state(rng);
-    system.set_network(K);
-    system.burn_in();
-    auto order = system.phase_order();
+    const auto order = order_evaluator(K, rng);
 
     if (order < threshold) {
       return std::numeric_limits<double>::infinity();
@@ -96,7 +92,7 @@ int main() {
   }
   std::vector<research::Metropolice_<network_t>> mcmcs;
   for (int i = 0; i < betas.size(); i++) {
-    mcmcs.emplace_back(research::Metropolice(Hamiltonian(threshold, T, tol),
+    mcmcs.emplace_back(research::Metropolice(Hamiltonian(threshold, PhaseOrder(T, tol)),
                                              SymFluctuate(scales[i]), initial,
                                              betas[i], rng()));
   }
