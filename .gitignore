@@ -4,7 +4,7 @@ external
 venv
 .env
 
-local_*.sh
+local*
 
 *.ssv
 *.png
