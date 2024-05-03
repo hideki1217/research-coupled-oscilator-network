@@ -12,16 +12,13 @@ int main() {
 
   std::vector<double> Ts = {100., 1000., 10000.};
   for (auto T : Ts) {
-    auto observer = coarse_grained_system_t(T, 1e-7);
-    for (auto& x : observer.state) {
-      x = unif(rng);
-    }
-
-    observer.set_network(K);
-    observer.burn_in();
+    auto system = coarse_grained_system_t(T, 1e-7);
+    system.set_random_state(rng);
+    system.set_network(K);
+    system.burn_in();
     std::vector<double> results;
     for (int i=0; i<5; i++) {
-      results.push_back(observer.phase_order());
+      results.push_back(system.phase_order());
     }
 
     double mean, var;
