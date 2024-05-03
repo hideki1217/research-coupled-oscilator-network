@@ -1,5 +1,5 @@
 #include <BS_thread_pool.hpp>
-#include <boost/numeric/odeint.hpp>
+#include <chrono>
 #include <iostream>
 #include <mine.hpp>
 
@@ -73,28 +73,103 @@ void reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
   }
 }
 
-int main() {
-  const double threshold = 0.99;
+auto parse_args(int argc, const char** argv) {
+  bool performance_mode = false;
+  int iteration = 1000;
+  int burn_in = 100;
+  double threshold = 0.99;
+  int epoch_size = 100;
+  std::vector<double> betas;
+  std::vector<double> scales;
+  int max_threads = 8;
+  double initial_k = 10.;
+
+  {
+    int cur = 0;
+    while (cur < argc) {
+      auto name = std::string(argv[cur]);
+      if (name == "--performance") {
+        performance_mode = true;
+        cur++;
+        continue;
+      }
+      if (name == "--iteration") {
+        iteration = std::stoi(argv[++cur]);
+        cur++;
+        continue;
+      }
+      if (name == "--burn-in") {
+        burn_in = std::stoi(argv[++cur]);
+        cur++;
+        continue;
+      }
+      if (name == "--threshold") {
+        threshold = std::stod(argv[++cur]);
+        cur++;
+        continue;
+      }
+      if (name == "--epoch-size") {
+        epoch_size = std::stoi(argv[++cur]);
+        cur++;
+        continue;
+      }
+      if (name == "--max-threads") {
+        max_threads = std::stoi(argv[++cur]);
+        cur++;
+        continue;
+      }
+      if (name == "--initial-k") {
+        initial_k = std::stod(argv[++cur]);
+        cur++;
+        continue;
+      }
+      if (name == "--repricas") {
+        try {
+          while (++cur < argc) {
+            auto s = std::string(argv[cur]);
+            auto sep_pos = s.find(':');
+            auto beta = std::stod(s.substr(0, sep_pos));
+            auto scale = std::stod(s.substr(sep_pos + 1));
+            betas.push_back(beta);
+            scales.push_back(scale);
+          }
+        } catch (...) {
+        }
+        continue;
+      }
+
+      cur += 1;
+    }
+  }
+
+  int num_threads = std::min(max_threads, int(betas.size()));
+  if (betas.size() == 0) {
+    betas.push_back(1.0);
+    scales.push_back(1.0);
+  }
+
+  assert(betas.size() == scales.size());
+  return std::make_tuple(performance_mode, iteration, burn_in, threshold,
+                         epoch_size, scales, betas, num_threads, initial_k);
+}
+
+int main(int argc, const char** argv) {
+  const auto [performance_mode, iteration, burn_in, threshold, epoch_size,
+              scales, betas, num_threads, initial_k] = parse_args(argc, argv);
   const double T = 1000.;
   const double tol = 1e-7;
-  const int num_threads = 8;
-  const int period = 100;
-  const int burn_in = 100;
-  const int iteration = 1000;
-  std::vector<double> betas = {1.0, 1.5};
-  std::vector<double> scales = {1.0, 1 / 1.5};
 
   std::mt19937 rng(20);
   network_t initial;
   {
-    for (int i = 0; i < N * N; i++) initial[i] = 10. / N;
+    for (int i = 0; i < N * N; i++) initial[i] = initial_k / N;
     for (int i = 0; i < N; i++) initial[i * N + i] = 0;
   }
   std::vector<research::Metropolice_<network_t>> mcmcs;
   for (int i = 0; i < betas.size(); i++) {
-    mcmcs.emplace_back(research::Metropolice(Hamiltonian(threshold, PhaseOrder(T, tol)),
-                                             SymFluctuate(scales[i]), initial,
-                                             betas[i], rng()));
+    mcmcs.emplace_back(research::Metropolice(
+        Hamiltonian(threshold, PhaseOrder(T, tol)), SymFluctuate(scales[i]),
+        initial, betas[i], rng()));
   }
 
   BS::thread_pool pool(num_threads);
@@ -103,7 +178,7 @@ int main() {
     pool.submit_loop<int>(0, mcmcs.size(),
                           [&](const int l) {
                             auto& mcmc = mcmcs[l];
-                            for (int j = 0; j < period; j++) {
+                            for (int j = 0; j < epoch_size; j++) {
                               mcmc.update();
                             }
                           })
@@ -114,8 +189,28 @@ int main() {
   };
 
   // Burn-In
-  for (int e = 0; e < burn_in; e++) {
-    update();
+  {
+    auto start = std::chrono::system_clock::now();
+
+    for (int e = 0; e < burn_in; e++) {
+      std::cout << e + 1 << " / " << burn_in << "\r" << std::flush;
+      update();
+    }
+
+    auto time = std::chrono::system_clock::now() - start;
+    auto time_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
+    if (performance_mode) {
+      std::cout << "# Param" << std::endl;
+      std::cout << "T: " << T << std::endl;
+      std::cout << "tol: " << tol << std::endl;
+      std::cout << "N: " << N << std::endl;
+      std::cout << "Num of reprica: " << betas.size() << std::endl;
+      std::cout << "# Time" << std::endl;
+      std::cout << time_ms << " (ms) / " << burn_in * epoch_size << "(epoch) / "
+                << burn_in << " (sample)" << std::endl;
+      return 0;
+    }
   }
 
   // Sampling
