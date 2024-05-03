@@ -2,6 +2,7 @@
 add_executable(main main.cpp)
 target_link_libraries(main boost mine thread_pool)
 target_compile_definitions(main PRIVATE MINE_UNIT_N=${MINE_UNIT_N})
+target_compile_options(main PRIVATE -Wno-c++20-extensions)
 
 add_executable(order_checker order_checker.cpp)
 target_link_libraries(order_checker boost mine)
