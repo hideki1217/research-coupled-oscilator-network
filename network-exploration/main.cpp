@@ -73,7 +73,7 @@ void reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
   }
 }
 
-auto parse_args(int argc, const char** argv) {
+struct param_t {
   bool performance_mode = false;
   int iteration = 1000;
   int burn_in = 100;
@@ -81,45 +81,68 @@ auto parse_args(int argc, const char** argv) {
   int epoch_size = 100;
   std::vector<double> betas;
   std::vector<double> scales;
-  int max_threads = 8;
+  int num_threads = 8;
   double initial_k = 10.;
 
+  void print() const {
+    std::cout << "# " << "iteration: " << iteration << std::endl;
+    std::cout << "# " << "burn_in: " << burn_in << std::endl;
+    std::cout << "# " << "threshold: " << threshold << std::endl;
+    std::cout << "# " << "epoch_size: " << epoch_size << std::endl;
+    std::cout << "# " << "num_reprica: " << betas.size() << std::endl;
+    
+    std::cout << "# " << "betas: " << "[";
+    for (auto b : betas) std::cout << b << " ";
+    std::cout << "]" << std::endl;
+    
+    std::cout << "# " << "scales: " << "[";
+    for (auto x : scales) std::cout << x << " ";
+    std::cout << "]" << std::endl;
+
+    std::cout << "# " << "num_threads: " << num_threads << std::endl;
+    std::cout << "# " << "initial_k: " << initial_k << std::endl;
+  }
+};
+
+auto parse_args(int argc, const char** argv) {
+  param_t p;
+
   {
-    int cur = 0;
+    int cur = 1;
     while (cur < argc) {
       auto name = std::string(argv[cur]);
       if (name == "--performance") {
-        performance_mode = true;
+        p.performance_mode = true;
         cur++;
         continue;
       }
       if (name == "--iteration") {
-        iteration = std::stoi(argv[++cur]);
+        p.iteration = std::stoi(argv[++cur]);
         cur++;
         continue;
       }
       if (name == "--burn-in") {
-        burn_in = std::stoi(argv[++cur]);
+        p.burn_in = std::stoi(argv[++cur]);
         cur++;
         continue;
       }
       if (name == "--threshold") {
-        threshold = std::stod(argv[++cur]);
+        p.threshold = std::stod(argv[++cur]);
         cur++;
         continue;
       }
       if (name == "--epoch-size") {
-        epoch_size = std::stoi(argv[++cur]);
+        p.epoch_size = std::stoi(argv[++cur]);
         cur++;
         continue;
       }
       if (name == "--max-threads") {
-        max_threads = std::stoi(argv[++cur]);
+        p.num_threads = std::stoi(argv[++cur]);
         cur++;
         continue;
       }
       if (name == "--initial-k") {
-        initial_k = std::stod(argv[++cur]);
+        p.initial_k = std::stod(argv[++cur]);
         cur++;
         continue;
       }
@@ -130,56 +153,54 @@ auto parse_args(int argc, const char** argv) {
             auto sep_pos = s.find(':');
             auto beta = std::stod(s.substr(0, sep_pos));
             auto scale = std::stod(s.substr(sep_pos + 1));
-            betas.push_back(beta);
-            scales.push_back(scale);
+            p.betas.push_back(beta);
+            p.scales.push_back(scale);
           }
         } catch (...) {
         }
         continue;
       }
 
-      std::cout << "Invalid arguments" << std::endl;
+      std::cout << "Invalid arguments: " << argv[cur] << std::endl;
       std::exit(1);
     }
   }
 
-  int num_threads = std::min(max_threads, int(betas.size()));
-  if (betas.size() == 0) {
-    betas.push_back(1.0);
-    scales.push_back(1.0);
+  p.num_threads = std::min(p.num_threads, int(p.betas.size()));
+  if (p.betas.size() == 0) {
+    p.betas.push_back(1.0);
+    p.scales.push_back(1.0);
   }
 
-  assert(betas.size() == scales.size());
-  return std::make_tuple(performance_mode, iteration, burn_in, threshold,
-                         epoch_size, scales, betas, num_threads, initial_k);
+  assert(p.betas.size() == p.scales.size());
+  return p;
 }
 
 int main(int argc, const char** argv) {
-  const auto [performance_mode, iteration, burn_in, threshold, epoch_size,
-              scales, betas, num_threads, initial_k] = parse_args(argc, argv);
+  const auto p = parse_args(argc, argv);
   const double T = 1000.;
   const double tol = 1e-7;
 
   std::mt19937 rng(20);
   network_t initial;
   {
-    for (int i = 0; i < N * N; i++) initial[i] = initial_k / N;
+    for (int i = 0; i < N * N; i++) initial[i] = p.initial_k / N;
     for (int i = 0; i < N; i++) initial[i * N + i] = 0;
   }
   std::vector<research::Metropolice_<network_t>> mcmcs;
-  for (int i = 0; i < betas.size(); i++) {
+  for (int i = 0; i < p.betas.size(); i++) {
     mcmcs.emplace_back(research::Metropolice(
-        Hamiltonian(threshold, PhaseOrder(T, tol)), SymFluctuate(scales[i]),
-        initial, betas[i], rng()));
+        Hamiltonian(p.threshold, PhaseOrder(T, tol)), SymFluctuate(p.scales[i]),
+        initial, p.betas[i], rng()));
   }
 
-  BS::thread_pool pool(num_threads);
+  BS::thread_pool pool(p.num_threads);
   auto update = [&]() {
     static int e = 0;
     pool.submit_loop<int>(0, mcmcs.size(),
                           [&](const int l) {
                             auto& mcmc = mcmcs[l];
-                            for (int j = 0; j < epoch_size; j++) {
+                            for (int j = 0; j < p.epoch_size; j++) {
                               mcmc.update();
                             }
                           })
@@ -193,36 +214,38 @@ int main(int argc, const char** argv) {
   {
     auto start = std::chrono::system_clock::now();
 
-    for (int e = 0; e < burn_in; e++) {
-      std::cout << e + 1 << " / " << burn_in << "\r" << std::flush;
+    for (int e = 0; e < p.burn_in; e++) {
+      std::cout << e + 1 << " / " << p.burn_in << "\r" << std::flush;
       update();
     }
 
     auto time = std::chrono::system_clock::now() - start;
     auto time_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
-    if (performance_mode) {
+    if (p.performance_mode) {
       std::cout << "# Param" << std::endl;
       std::cout << "T: " << T << std::endl;
       std::cout << "tol: " << tol << std::endl;
       std::cout << "N: " << N << std::endl;
-      std::cout << "Num of reprica: " << betas.size() << std::endl;
+      std::cout << "Num of reprica: " << p.betas.size() << std::endl;
       std::cout << "# Time" << std::endl;
-      std::cout << time_ms << " (ms) / " << burn_in * epoch_size << "(epoch) / "
-                << burn_in << " (sample)" << std::endl;
+      std::cout << time_ms << " (ms) / " << p.burn_in * p.epoch_size << "(epoch) / "
+                << p.burn_in << " (sample)" << std::endl;
       return 0;
     }
   }
 
+  p.print();
+
   // Sampling
-  for (int e = 0; e < iteration; e++) {
+  for (int e = 0; e < p.iteration; e++) {
     update();
 
     for (auto& mcmc : mcmcs) {
       for (auto& K_ij : mcmc.state()) {
         std::cout << K_ij << " ";
       }
+      std::cout << std::endl;
     }
-    std::cout << std::endl;
   }
 }
