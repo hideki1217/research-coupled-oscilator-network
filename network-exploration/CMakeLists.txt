@@ -8,6 +8,10 @@ add_executable(order_checker order_checker.cpp)
 target_link_libraries(order_checker boost mine)
 target_compile_definitions(order_checker PRIVATE MINE_UNIT_N=${MINE_UNIT_N})
 
+add_executable(mean_field mean_field.cpp)
+target_link_libraries(mean_field boost mine)
+target_compile_definitions(mean_field PRIVATE MINE_UNIT_N=${MINE_UNIT_N})
+
 add_executable(test_order_evaluator test_order_evaluator.cpp)
 target_link_libraries(test_order_evaluator boost mine)
 target_compile_definitions(test_order_evaluator PRIVATE MINE_UNIT_N=2)
