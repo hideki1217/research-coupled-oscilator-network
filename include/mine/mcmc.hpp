@@ -52,7 +52,7 @@ struct Metropolice_ {
     const auto E = H(*_state, rng);
 
     const auto p = (std::isinf(E)) ? 0 : std::exp(-beta * (E - _E));
-    if (1 < p || random_p(rng) < p) {
+    if (1 < p || (0 < p && random_p(rng) < p)) {
       _E = E;
 
       return Result::Accepted;
