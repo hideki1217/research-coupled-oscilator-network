@@ -215,7 +215,6 @@ int main(int argc, const char** argv) {
     auto start = std::chrono::system_clock::now();
 
     for (int e = 0; e < p.burn_in; e++) {
-      std::cout << e + 1 << " / " << p.burn_in << "\r" << std::flush;
       update();
     }
 
