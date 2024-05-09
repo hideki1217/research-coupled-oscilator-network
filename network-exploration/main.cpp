@@ -60,6 +60,38 @@ struct SymFluctuate {
   }
 };
 
+struct AsymFluctuate {
+ public:
+  const double scale;
+
+ private:
+  std::vector<std::pair<int, int>> index_list;
+
+ public:
+  AsymFluctuate(double scale) : scale(scale) {
+    for (int i = 0; i < N; i++) {
+      for (int j = 0; j < N; j++) {
+        if (i != j) index_list.push_back({i, j});
+      }
+    }
+  }
+  std::function<void()> operator()(network_t& state, std::mt19937& rng) {
+    std::normal_distribution normal(0., scale);
+    std::uniform_int_distribution indexer(0, int(index_list.size() - 1));
+
+    const auto [i, j] = index_list[indexer(rng)];
+    const auto noise = normal(rng);
+
+    const auto idx = i * N + j;
+    const auto prev = state[idx];
+
+    state[idx] += noise;
+
+    auto rebert = [=, &state]() mutable { state[idx] = prev; };
+    return rebert;
+  }
+};
+
 template <typename MCMC, typename Rng>
 void reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
   auto unif = std::uniform_real_distribution(0., 1.);
