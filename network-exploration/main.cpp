@@ -208,6 +208,47 @@ auto parse_args(int argc, const char** argv) {
   return p;
 }
 
+struct async_updater_t {
+  const int nstep;
+  BS::thread_pool pool;
+  int _c{0};
+
+  async_updater_t(int nstep, int num_threads) : nstep(nstep), pool(num_threads) {}
+  template <typename Rng, typename MCMC>
+  void operator()(std::vector<MCMC>& repricas, Rng& rng) {
+    pool.submit_loop<int>(0, repricas.size(),
+                          [&](const int l) {
+                            auto& mcmc = repricas[l];
+                            for (int j = 0; j < nstep; j++) {
+                              mcmc.update();
+                            }
+                          })
+        .wait();
+
+    // swap phase
+    reprica_swap(_c++ % 2 == 0, repricas, rng);
+  }
+};
+
+struct sync_updater_t {
+  const int nstep;
+  int _c{0};
+
+  sync_updater_t(int nstep) : nstep(nstep) {}
+  template <typename Rng, typename MCMC>
+  void operator()(std::vector<MCMC>& repricas, Rng& rng) {
+    for (int l = 0; l < repricas.size(); l++) {
+      auto& mcmc = repricas[l];
+      for (int j = 0; j < nstep; j++) {
+        mcmc.update();
+      }
+    }
+
+    // swap phase
+    reprica_swap(_c++ % 2 == 0, repricas, rng);
+  }
+};
+
 int main(int argc, const char** argv) {
   const auto p = parse_args(argc, argv);
   const double T = 1000.;
@@ -226,28 +267,15 @@ int main(int argc, const char** argv) {
         initial, p.betas[i], rng()));
   }
 
-  BS::thread_pool pool(p.num_threads);
-  auto update = [&]() {
-    static int e = 0;
-    pool.submit_loop<int>(0, mcmcs.size(),
-                          [&](const int l) {
-                            auto& mcmc = mcmcs[l];
-                            for (int j = 0; j < p.epoch_size; j++) {
-                              mcmc.update();
-                            }
-                          })
-        .wait();
-
-    // swap phase
-    reprica_swap(e++ % 2 == 0, mcmcs, rng);
-  };
+  async_updater_t updater(p.epoch_size, p.num_threads);
+  // sync_updater_t updater(p.epoch_size);
 
   // Burn-In
   {
     auto start = std::chrono::system_clock::now();
 
     for (int e = 0; e < p.burn_in; e++) {
-      update();
+      updater(mcmcs, rng);
     }
 
     auto time = std::chrono::system_clock::now() - start;
@@ -260,8 +288,8 @@ int main(int argc, const char** argv) {
       std::cout << "N: " << N << std::endl;
       std::cout << "Num of reprica: " << p.betas.size() << std::endl;
       std::cout << "# Time" << std::endl;
-      std::cout << time_ms << " (ms) / " << p.burn_in * p.epoch_size << "(epoch) / "
-                << p.burn_in << " (sample)" << std::endl;
+      std::cout << time_ms << " (ms) / " << p.burn_in * p.epoch_size
+                << "(epoch) / " << p.burn_in << " (sample)" << std::endl;
       return 0;
     }
   }
@@ -270,7 +298,7 @@ int main(int argc, const char** argv) {
 
   // Sampling
   for (int e = 0; e < p.iteration; e++) {
-    update();
+    updater(mcmcs, rng);
 
     for (auto& mcmc : mcmcs) {
       for (auto& K_ij : mcmc.state()) {
