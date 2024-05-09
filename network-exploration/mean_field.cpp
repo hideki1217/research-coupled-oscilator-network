@@ -21,7 +21,6 @@ int main() {
 
     system.set_random_state(rng);
     system.set_network(K);
-    system.burn_in();
 
     std::cout << k << " ";
     for (int i = 0; i < 5; i++) {

@@ -16,9 +16,8 @@ int main() {
     auto system = coarse_grained_system_t(T, 1e-7);
     system.set_random_state(rng);
     system.set_network(K);
-    system.burn_in();
     std::vector<double> results;
-    for (int i=0; i<5; i++) {
+    for (int i=0; i<6; i++) {
       results.push_back(system.phase_order());
     }
 

@@ -63,7 +63,6 @@ struct PhaseOrder {
   auto operator()(const network_t& K, std::mt19937& rng) {
     if ((eval_count++) == 0) system.set_random_state(rng);
     system.set_network(K);
-    system.burn_in();
     return system.phase_order();
   }
 };
