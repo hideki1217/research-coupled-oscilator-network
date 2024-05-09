@@ -9,6 +9,7 @@ int main() {
   network_t K;
   std::cout << "Input network (" << N << "x" << N << ")" << std::endl << "> ";
   for (int i = 0; i < K.size(); i++) std::cin >> K[i];
+  std::cout << "K=" << std::reduce(K.cbegin(), K.cend()) / N << std::endl;
 
   std::vector<double> Ts = {100., 1000., 10000.};
   for (auto T : Ts) {
