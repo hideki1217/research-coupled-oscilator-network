@@ -21,7 +21,9 @@ int main() {
 
     system.set_random_state(rng);
     system.set_network(K);
+    system.burn_in(0.1);
 
+    std::cout << std::setw(6) << std::fixed;
     std::cout << k << " ";
     for (int i = 0; i < 5; i++) {
       std::cout << system.phase_order() << " ";

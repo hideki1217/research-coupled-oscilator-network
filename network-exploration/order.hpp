@@ -35,10 +35,10 @@ struct coarse_grained_system_t {
   }
   void set_network(const network_t& K) { system.K = K; }
 
-  void burn_in() {
+  void burn_in(double p = 1) {
     auto stepper = boost::numeric::odeint::make_controlled<
         boost::numeric::odeint::runge_kutta_dopri5<state_t>>(tol, tol);
-    boost::numeric::odeint::integrate_adaptive(stepper, system, state, 0., T,
+    boost::numeric::odeint::integrate_adaptive(stepper, system, state, 0., T * p,
                                                1.0);
   }
 
@@ -63,6 +63,7 @@ struct PhaseOrder {
   auto operator()(const network_t& K, std::mt19937& rng) {
     if ((eval_count++) == 0) system.set_random_state(rng);
     system.set_network(K);
+    system.burn_in(0.1);
     return system.phase_order();
   }
 };
