@@ -10,7 +10,7 @@ if [ -d "_build" ]; then
     rm -rf _build
 fi
 
-echo -en "Q. Which BUILD_TYPE do you select? (release/debug) : "
+echo -en "Q. Which BUILD_TYPE do you select? (release/debug/profile) : "
 read _build_type
 case $_build_type in
 r*)
@@ -18,6 +18,9 @@ r*)
 ;;
 d*)
     build_type=Debug
+;;
+p*)
+    build_type=RelWithDebInfo
 ;;
 *)
     echo "ERROR: '$_build_type' is invalid. expected 'r*' or 'd*'"
