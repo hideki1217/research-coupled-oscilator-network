@@ -9,3 +9,4 @@ local*
 *.ssv
 *.png
 *.log
+*.out
