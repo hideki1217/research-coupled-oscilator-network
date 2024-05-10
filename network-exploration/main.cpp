@@ -1,4 +1,5 @@
 #include <BS_thread_pool.hpp>
+#include <bitset>
 #include <chrono>
 #include <iostream>
 #include <mine.hpp>
@@ -92,17 +93,26 @@ struct AsymFluctuate {
   }
 };
 
+struct swap_result_t {
+  std::bitset<N> try_swap;
+  std::bitset<N> swap_status;
+};
 template <typename MCMC, typename Rng>
-void reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
+auto reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
   auto unif = std::uniform_real_distribution(0., 1.);
 
+  swap_result_t res;
   for (int l = mode; l + 1 < repricas.size(); l += 2) {
+    res.try_swap[l].flip();
+
     const auto p = std::exp((repricas[l].beta - repricas[l + 1].beta) *
                             (repricas[l].energy() - repricas[l + 1].energy()));
     if (1 < p || unif(rng) < p) {
       repricas[l].swap(repricas[l + 1]);
+      res.swap_status[l].flip();
     }
   }
+  return res;
 }
 
 struct param_t {
@@ -116,23 +126,24 @@ struct param_t {
   int num_threads = 8;
   double initial_k = 10.;
 
-  void print() const {
-    std::cout << "# " << "iteration: " << iteration << std::endl;
-    std::cout << "# " << "burn_in: " << burn_in << std::endl;
-    std::cout << "# " << "threshold: " << threshold << std::endl;
-    std::cout << "# " << "epoch_size: " << epoch_size << std::endl;
-    std::cout << "# " << "num_reprica: " << betas.size() << std::endl;
-    
-    std::cout << "# " << "betas: " << "[";
-    for (auto b : betas) std::cout << b << " ";
-    std::cout << "]" << std::endl;
-    
-    std::cout << "# " << "scales: " << "[";
-    for (auto x : scales) std::cout << x << " ";
-    std::cout << "]" << std::endl;
+  template <typename OS>
+  void print(OS& os) const {
+    os << "iteration: " << iteration << std::endl;
+    os << "burn_in: " << burn_in << std::endl;
+    os << "threshold: " << threshold << std::endl;
+    os << "epoch_size: " << epoch_size << std::endl;
+    os << "num_reprica: " << betas.size() << std::endl;
 
-    std::cout << "# " << "num_threads: " << num_threads << std::endl;
-    std::cout << "# " << "initial_k: " << initial_k << std::endl;
+    os << "betas: " << "[";
+    for (auto b : betas) os << b << " ";
+    os << "]" << std::endl;
+
+    os << "scales: " << "[";
+    for (auto x : scales) os << x << " ";
+    os << "]" << std::endl;
+
+    os << "num_threads: " << num_threads << std::endl;
+    os << "initial_k: " << initial_k << std::endl;
   }
 };
 
@@ -208,41 +219,81 @@ auto parse_args(int argc, const char** argv) {
   return p;
 }
 
+struct stat_t {
+  std::array<int, N> _try_swap;
+  std::array<int, N> _swap;
+  std::vector<int> _update_acc;
+  std::vector<int> _update_c;
+
+  stat_t(int num_reprica)
+      : _update_acc(num_reprica, 0), _update_c(num_reprica, 0) {
+    std::fill(_try_swap.begin(), _try_swap.end(), 0);
+    std::fill(_swap.begin(), _swap.end(), 0);
+  }
+
+  void regist_swap(const swap_result_t& result) {
+    for (int i = 0; i < N; i++) {
+      if (result.try_swap[i]) {
+        _try_swap[i] += 1;
+        _swap[i] += result.swap_status[i];
+      }
+    }
+  }
+
+  void regist_update(int index, bool is_accepted) {
+    _update_c[index] += 1;
+    _update_acc[index] += is_accepted;
+  }
+
+  double swap_rate(int index) {
+    assert(index < N);
+    return double(_swap[index]) / _try_swap[index];
+  }
+
+  double accepted_rate(int index) {
+    return double(_update_acc[index] / _update_c[index]);
+  }
+};
+
+struct update_result_t {
+  swap_result_t swap_result;
+  std::vector<double> accepted_rate;
+};
 struct async_updater_t {
   const int nstep;
   BS::thread_pool pool;
   int _c{0};
 
-  async_updater_t(int nstep, int num_threads) : nstep(nstep), pool(num_threads) {}
+  async_updater_t(int nstep, int num_threads)
+      : nstep(nstep), pool(num_threads) {}
+  template <typename Rng, typename MCMC>
+  void operator()(std::vector<MCMC>& repricas, Rng& rng, stat_t& stat) {
+    pool.submit_loop<int>(0, repricas.size(),
+                          [&](const int l) {
+                            auto& mcmc = repricas[l];
+                            for (int j = 0; j < nstep; j++) {
+                              const auto status = mcmc.update();
+                              stat.regist_update(
+                                  l, status == MCMC::Result::Accepted);
+                            }
+                          })
+        .wait();
+
+    // swap phase
+    const auto swap_res = reprica_swap(_c++ % 2 == 0, repricas, rng);
+    stat.regist_swap(swap_res);
+  }
+
   template <typename Rng, typename MCMC>
   void operator()(std::vector<MCMC>& repricas, Rng& rng) {
     pool.submit_loop<int>(0, repricas.size(),
                           [&](const int l) {
                             auto& mcmc = repricas[l];
                             for (int j = 0; j < nstep; j++) {
-                              mcmc.update();
+                             mcmc.update();
                             }
                           })
         .wait();
-
-    // swap phase
-    reprica_swap(_c++ % 2 == 0, repricas, rng);
-  }
-};
-
-struct sync_updater_t {
-  const int nstep;
-  int _c{0};
-
-  sync_updater_t(int nstep) : nstep(nstep) {}
-  template <typename Rng, typename MCMC>
-  void operator()(std::vector<MCMC>& repricas, Rng& rng) {
-    for (int l = 0; l < repricas.size(); l++) {
-      auto& mcmc = repricas[l];
-      for (int j = 0; j < nstep; j++) {
-        mcmc.update();
-      }
-    }
 
     // swap phase
     reprica_swap(_c++ % 2 == 0, repricas, rng);
@@ -268,7 +319,7 @@ int main(int argc, const char** argv) {
   }
 
   async_updater_t updater(p.epoch_size, p.num_threads);
-  // sync_updater_t updater(p.epoch_size);
+  stat_t stat(mcmcs.size());
 
   // Burn-In
   {
@@ -294,17 +345,31 @@ int main(int argc, const char** argv) {
     }
   }
 
-  p.print();
+  {
+    std::ofstream param_f("param.yaml");
+    p.print(param_f);
+  }
 
-  // Sampling
-  for (int e = 0; e < p.iteration; e++) {
-    updater(mcmcs, rng);
+  try{
+    std::ofstream network_f("network.ssv");
+    // Sampling
+    for (int e = 0; e < p.iteration; e++) {
+      updater(mcmcs, rng, stat);
 
-    for (auto& mcmc : mcmcs) {
-      for (auto& K_ij : mcmc.state()) {
-        std::cout << K_ij << " ";
+      for (auto& mcmc : mcmcs) {
+        for (int i = 0; i < mcmc.state().size(); i++) {
+          network_f << mcmc.state()[i]
+                    << ((i != mcmc.state().size() - 1) ? " " : "");
+        }
+        network_f << std::endl;
       }
-      std::cout << std::endl;
+    }
+  } catch(...){}
+
+  {
+    std::ofstream stat_f("stat.ssv");
+    for (int i = 0; i < N; i++) {
+      stat_f << stat.swap_rate(i) << ((i != N - 1) ? " " : "");
     }
   }
 }
