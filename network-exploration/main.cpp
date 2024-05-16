@@ -322,6 +322,11 @@ int main(int argc, const char** argv) {
   async_updater_t updater(p.epoch_size, p.num_threads);
   stat_t stat(mcmcs.size());
 
+  {
+    std::ofstream param_f("param.yaml");
+    p.print(param_f);
+  }
+
   // Burn-In
   {
     auto start = std::chrono::system_clock::now();
@@ -344,11 +349,6 @@ int main(int argc, const char** argv) {
                 << "(epoch) / " << p.burn_in << " (sample)" << std::endl;
       return 0;
     }
-  }
-
-  {
-    std::ofstream param_f("param.yaml");
-    p.print(param_f);
   }
 
   try{
