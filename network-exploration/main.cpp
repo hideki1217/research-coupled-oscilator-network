@@ -128,6 +128,7 @@ struct param_t {
 
   template <typename OS>
   void print(OS& os) const {
+    os << "N: " << N << std::endl;
     os << "iteration: " << iteration << std::endl;
     os << "burn_in: " << burn_in << std::endl;
     os << "threshold: " << threshold << std::endl;
