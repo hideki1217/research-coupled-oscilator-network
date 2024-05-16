@@ -21,7 +21,7 @@ int main() {
 
     system.set_random_state(rng);
     system.set_network(K);
-    system.burn_in(0.1);
+    system.burn_in();
 
     std::cout << std::setw(6) << std::fixed;
     std::cout << k << " ";
