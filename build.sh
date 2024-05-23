@@ -6,10 +6,6 @@ else
     echo "WORNING: .env file does not exist."
 fi
 
-if [ -d "_build" ]; then
-    rm -rf _build
-fi
-
 echo -en "Q. Which BUILD_TYPE do you select? (release/debug/profile) : "
 read _build_type
 case $_build_type in
@@ -43,6 +39,11 @@ fi
 
 echo -e "> the number of units is '$unit_n'"
 echo -e ""
+
+
+if [ -d "_build" ]; then
+    rm -rf _build
+fi
 
 cmake -S . -B _build \
     -D CMAKE_BUILD_TYPE=${build_type} \
