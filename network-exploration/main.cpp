@@ -226,8 +226,13 @@ struct stat_t {
   std::vector<int> _update_acc;
   std::vector<int> _update_c;
 
-  stat_t(int num_reprica)
-      : _update_acc(num_reprica, 0), _update_c(num_reprica, 0) {
+  stat_t(int num_reprica) : _update_acc(num_reprica), _update_c(num_reprica) {
+    reset();
+  }
+
+  void reset() {
+    std::fill(_update_acc.begin(), _update_acc.end(), 0);
+    std::fill(_update_c.begin(), _update_c.end(), 0);
     std::fill(_try_swap.begin(), _try_swap.end(), 0);
     std::fill(_swap.begin(), _swap.end(), 0);
   }
@@ -252,7 +257,7 @@ struct stat_t {
   }
 
   double accepted_rate(int index) {
-    return double(_update_acc[index] / _update_c[index]);
+    return double(_update_acc[index]) / _update_c[index];
   }
 };
 
@@ -291,7 +296,7 @@ struct async_updater_t {
                           [&](const int l) {
                             auto& mcmc = repricas[l];
                             for (int j = 0; j < nstep; j++) {
-                             mcmc.update();
+                              mcmc.update();
                             }
                           })
         .wait();
@@ -351,7 +356,7 @@ int main(int argc, const char** argv) {
     }
   }
 
-  try{
+  try {
     std::ofstream network_f("network.ssv");
     // Sampling
     for (int e = 0; e < p.iteration; e++) {
@@ -364,13 +369,25 @@ int main(int argc, const char** argv) {
         }
         network_f << std::endl;
       }
-    }
-  } catch(...){}
 
-  {
-    std::ofstream stat_f("stat.ssv");
-    for (int i = 0; i < N; i++) {
-      stat_f << stat.swap_rate(i) << ((i != N - 1) ? " " : "");
+      if (e % 100 == 0) {
+        std::cout << "e=" << e << std::endl;
+
+        std::cout << stat.swap_rate(0);
+        for (int i = 1; i < N; i++) {
+          std::cout << " " << stat.swap_rate(i);
+        }
+        std::cout << std::endl;
+
+        std::cout << stat.accepted_rate(0);
+        for (int i = 1; i < N; i++) {
+          std::cout << " " << stat.accepted_rate(i);
+        }
+        std::cout << std::endl;
+
+        stat.reset();
+      }
     }
+  } catch (...) {
   }
 }
