@@ -22,10 +22,9 @@ struct coarse_grained_system_t {
 
  public:
   coarse_grained_system_t(double T, double tol) : T(T), tol(tol) {
-    // |w[0]| = |w[-1]| = 1
-    for (int i = 0; i < N; i++)
+    for (int i = 0; i < N; i++) {
       system.w[i] = std::tan(PI * (double(i + 1) / (N + 1) - 0.5));
-    for (int i = 0; i < N; i++) system.w[i] /= system.w[N - 1];
+    }
   }
 
   template <typename Rng>
