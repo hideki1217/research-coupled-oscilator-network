@@ -55,12 +55,13 @@ struct PhaseOrder {
  private:
   coarse_grained_system_t system;
   int eval_count{0};
+  bool init_only_first;
 
  public:
-  PhaseOrder(double T, double tol) : system(T, tol) {}
+  PhaseOrder(double T, double tol, bool init_only_first = true) : system(T, tol), init_only_first(init_only_first) {}
   static PhaseOrder _default() { return PhaseOrder(1000., 1e-7); }
   auto operator()(const network_t& K, std::mt19937& rng) {
-    if ((eval_count++) == 0) system.set_random_state(rng);
+    if (!init_only_first || (eval_count++) == 0) system.set_random_state(rng);
     system.set_network(K);
     system.burn_in();
     return system.phase_order();

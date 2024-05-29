@@ -117,6 +117,7 @@ auto reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
 
 struct param_t {
   bool performance_mode = false;
+  bool init_only_first = true;
   int iteration = 1000;
   int burn_in = 100;
   double threshold = 0.99;
@@ -145,6 +146,8 @@ struct param_t {
 
     os << "num_threads: " << num_threads << std::endl;
     os << "initial_k: " << initial_k << std::endl;
+
+    os << "init_only_first: " << int(init_only_first) << std::endl;
   }
 };
 
@@ -157,6 +160,11 @@ auto parse_args(int argc, const char** argv) {
       auto name = std::string(argv[cur]);
       if (name == "--performance") {
         p.performance_mode = true;
+        cur++;
+        continue;
+      }
+      if (name == "--init-only-first") {
+        p.init_only_first = true;
         cur++;
         continue;
       }
@@ -320,7 +328,7 @@ int main(int argc, const char** argv) {
   std::vector<research::Metropolice_<network_t>> mcmcs;
   for (int i = 0; i < p.betas.size(); i++) {
     mcmcs.emplace_back(research::Metropolice(
-        Hamiltonian(p.threshold, PhaseOrder(T, tol)), SymFluctuate(p.scales[i]),
+        Hamiltonian(p.threshold, PhaseOrder(T, tol, p.init_only_first)), SymFluctuate(p.scales[i]),
         initial, p.betas[i], rng()));
   }
 
