@@ -12,7 +12,7 @@ int main() {
 
   std::vector<double> ks;
   for (int i = 0; i < M; i++) {
-    ks.push_back((double(0) * (M - 1 - i) + double(5) * i) / (M-1));
+    ks.push_back((double(0) * (M - 1 - i) + double(20) * i) / (M-1));
   }
   for (auto k : ks) {
     network_t K;

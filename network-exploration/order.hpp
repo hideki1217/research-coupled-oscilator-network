@@ -54,14 +54,14 @@ struct coarse_grained_system_t {
 struct PhaseOrder {
  private:
   coarse_grained_system_t system;
-  int eval_count{0};
-  bool init_only_first;
+  int count{0};
+  bool init_everytime;
 
  public:
-  PhaseOrder(double T, double tol, bool init_only_first = true) : system(T, tol), init_only_first(init_only_first) {}
+  PhaseOrder(double T, double tol, bool init_everytime = false) : system(T, tol), init_everytime(init_everytime) {}
   static PhaseOrder _default() { return PhaseOrder(1000., 1e-7); }
   auto operator()(const network_t& K, std::mt19937& rng) {
-    if (!init_only_first || (eval_count++) == 0) system.set_random_state(rng);
+    if (init_everytime || (count++) == 0) system.set_random_state(rng);
     system.set_network(K);
     system.burn_in();
     return system.phase_order();
