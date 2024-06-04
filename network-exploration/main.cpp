@@ -9,20 +9,34 @@
 struct Hamiltonian {
  public:
   const double threshold;
+  const bool more_than_zero;
 
  private:
   PhaseOrder order_evaluator;
 
  public:
-  Hamiltonian(double threshold, PhaseOrder&& order_evaluator)
-      : threshold(threshold), order_evaluator(order_evaluator) {}
+  Hamiltonian(double threshold, PhaseOrder&& order_evaluator,
+              bool more_than_zero = false)
+      : threshold(threshold),
+        order_evaluator(order_evaluator),
+        more_than_zero(more_than_zero) {}
   double operator()(const network_t& K, std::mt19937& rng) {
     const auto order = order_evaluator(K, rng);
+
+    if (more_than_zero) {
+      for (auto k : K) {
+        if (k < 0) return std::numeric_limits<double>::infinity();
+      }
+    }
 
     if (order < threshold) {
       return std::numeric_limits<double>::infinity();
     } else {
-      return std::reduce(K.cbegin(), K.cend()) / N;
+      double L1 = 0;
+      for (int i=0; i<K.size(); i++) {
+        L1 += std::abs(K[i]);
+      }
+      return L1 / N;
     }
   }
 };
@@ -94,22 +108,25 @@ struct AsymFluctuate {
 };
 
 struct swap_result_t {
-  std::bitset<N> try_swap;
-  std::bitset<N> swap_status;
+  std::vector<bool> try_swap;
+  std::vector<bool> swap_status;
+
+  swap_result_t(int num_reprica)
+      : try_swap(num_reprica, false), swap_status(num_reprica, false) {}
 };
 template <typename MCMC, typename Rng>
 auto reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
   auto unif = std::uniform_real_distribution(0., 1.);
 
-  swap_result_t res;
+  swap_result_t res(repricas.size());
   for (int l = mode; l + 1 < repricas.size(); l += 2) {
-    res.try_swap[l].flip();
+    res.try_swap[l] = true;
 
     const auto p = std::exp((repricas[l].beta - repricas[l + 1].beta) *
                             (repricas[l].energy() - repricas[l + 1].energy()));
     if (1 < p || unif(rng) < p) {
       repricas[l].swap(repricas[l + 1]);
-      res.swap_status[l].flip();
+      res.swap_status[l] = true;
     }
   }
   return res;
@@ -118,6 +135,7 @@ auto reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
 struct param_t {
   bool performance_mode = false;
   bool init_everytime = false;
+  bool more_than_zero = false;
   int iteration = 1000;
   int burn_in = 100;
   double threshold = 0.99;
@@ -148,6 +166,7 @@ struct param_t {
     os << "initial_k: " << initial_k << std::endl;
 
     os << "init_everytime: " << int(init_everytime) << std::endl;
+    os << "more_than_zero: " << int(more_than_zero) << std::endl;
   }
 };
 
@@ -165,6 +184,11 @@ auto parse_args(int argc, const char** argv) {
       }
       if (name == "--init-everytime") {
         p.init_everytime = true;
+        cur++;
+        continue;
+      }
+       if (name == "--more-than-zero") {
+        p.more_than_zero = true;
         cur++;
         continue;
       }
@@ -229,12 +253,18 @@ auto parse_args(int argc, const char** argv) {
 }
 
 struct stat_t {
-  std::array<int, N> _try_swap;
-  std::array<int, N> _swap;
+  const int num_reprica;
+  std::vector<int> _try_swap;
+  std::vector<int> _swap;
   std::vector<int> _update_acc;
   std::vector<int> _update_c;
 
-  stat_t(int num_reprica) : _update_acc(num_reprica), _update_c(num_reprica) {
+  stat_t(int num_reprica)
+      : num_reprica(num_reprica),
+        _try_swap(num_reprica),
+        _swap(num_reprica),
+        _update_acc(num_reprica),
+        _update_c(num_reprica) {
     reset();
   }
 
@@ -246,7 +276,7 @@ struct stat_t {
   }
 
   void regist_swap(const swap_result_t& result) {
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < num_reprica; i++) {
       if (result.try_swap[i]) {
         _try_swap[i] += 1;
         _swap[i] += result.swap_status[i];
@@ -255,16 +285,22 @@ struct stat_t {
   }
 
   void regist_update(int index, bool is_accepted) {
+    assert(0 <= index && index < num_reprica);
+
     _update_c[index] += 1;
     _update_acc[index] += is_accepted;
   }
 
   double swap_rate(int index) {
+    assert(0 <= index && index < num_reprica);
+
     assert(index < N);
     return double(_swap[index]) / _try_swap[index];
   }
 
   double accepted_rate(int index) {
+    assert(0 <= index && index < num_reprica);
+
     return double(_update_acc[index]) / _update_c[index];
   }
 };
@@ -319,6 +355,8 @@ int main(int argc, const char** argv) {
   const double T = 1000.;
   const double tol = 1e-7;
 
+  const int num_reprica = p.betas.size();
+
   std::mt19937 rng(20);
   network_t initial;
   {
@@ -328,8 +366,8 @@ int main(int argc, const char** argv) {
   std::vector<research::Metropolice_<network_t>> mcmcs;
   for (int i = 0; i < p.betas.size(); i++) {
     mcmcs.emplace_back(research::Metropolice(
-        Hamiltonian(p.threshold, PhaseOrder(T, tol, p.init_everytime)), SymFluctuate(p.scales[i]),
-        initial, p.betas[i], rng()));
+        Hamiltonian(p.threshold, PhaseOrder(T, tol, p.init_everytime), p.more_than_zero),
+        SymFluctuate(p.scales[i]), initial, p.betas[i], rng()));
   }
 
   async_updater_t updater(p.epoch_size, p.num_threads);
@@ -382,13 +420,13 @@ int main(int argc, const char** argv) {
         std::cout << "e=" << e << std::endl;
 
         std::cout << stat.swap_rate(0);
-        for (int i = 1; i < N; i++) {
+        for (int i = 1; i < num_reprica; i++) {
           std::cout << " " << stat.swap_rate(i);
         }
         std::cout << std::endl;
 
         std::cout << stat.accepted_rate(0);
-        for (int i = 1; i < N; i++) {
+        for (int i = 1; i < num_reprica; i++) {
           std::cout << " " << stat.accepted_rate(i);
         }
         std::cout << std::endl;
