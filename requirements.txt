@@ -3,3 +3,4 @@ matplotlib
 parse
 ipykernel
 scipy
+scikit-learn
