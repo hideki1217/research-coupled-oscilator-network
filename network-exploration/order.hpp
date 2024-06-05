@@ -51,26 +51,25 @@ struct coarse_grained_system_t {
   }
 
   auto freq_order() {
-    state_t start;
-    std::copy(state.cbegin(), state.cend(), start.begin());
+    state_t prev;
+    std::copy(state.cbegin(), state.cend(), prev.begin());
 
     auto stepper = boost::numeric::odeint::make_controlled<
         boost::numeric::odeint::runge_kutta_dopri5<state_t>>(tol, tol);
     boost::numeric::odeint::integrate_adaptive(stepper, system, state, T, 2 * T,
                                             1.0);
 
-    state_t &end = state;
-    vec_t mean;
+    vec_t mean_freq;
     for (int i=0; i<N; i++) {
-      mean[i] = (end[i] - start[i]) / T;
+      mean_freq[i] = (state[i] - prev[i]) / T;
     }
-    std::sort(mean.begin(), mean.end());
+    std::sort(mean_freq.begin(), mean_freq.end());
 
     int N_omega = 1;
     int index = 0;
-    while (index < mean.size()) {
+    while (index < mean_freq.size()) {
       int cur = index;
-      while (cur < mean.size() && std::abs(mean[index] - mean[cur]) < 1e-2) {
+      while (cur < mean_freq.size() && std::abs(mean_freq[index] - mean_freq[cur]) < 1e-2) {
         cur += 1;
       }
       N_omega = std::max(N_omega, cur - index);
