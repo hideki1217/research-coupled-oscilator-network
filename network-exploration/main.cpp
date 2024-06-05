@@ -6,16 +6,17 @@
 
 #include "order.hpp"
 
+template <typename Order>
 struct Hamiltonian {
  public:
   const double threshold;
   const bool more_than_zero;
 
  private:
-  PhaseOrder order_evaluator;
+  Order order_evaluator;
 
  public:
-  Hamiltonian(double threshold, PhaseOrder&& order_evaluator,
+  Hamiltonian(double threshold, Order&& order_evaluator,
               bool more_than_zero = false)
       : threshold(threshold),
         order_evaluator(order_evaluator),
@@ -33,7 +34,7 @@ struct Hamiltonian {
       return std::numeric_limits<double>::infinity();
     } else {
       double L1 = 0;
-      for (int i=0; i<K.size(); i++) {
+      for (int i = 0; i < K.size(); i++) {
         L1 += std::abs(K[i]);
       }
       return L1 / N;
@@ -132,6 +133,11 @@ auto reprica_swap(bool mode, std::vector<MCMC>& repricas, Rng& rng) {
   return res;
 }
 
+enum class Orders {
+  Phase = 0,
+  Freq = 1,
+};
+
 struct param_t {
   bool performance_mode = false;
   bool init_everytime = false;
@@ -144,6 +150,7 @@ struct param_t {
   std::vector<double> scales;
   int num_threads = 8;
   double initial_k = 10.;
+  Orders order_mode = Orders::Phase;
 
   template <typename OS>
   void print(OS& os) const {
@@ -167,6 +174,13 @@ struct param_t {
 
     os << "init_everytime: " << int(init_everytime) << std::endl;
     os << "more_than_zero: " << int(more_than_zero) << std::endl;
+    
+    switch (order_mode) {
+      case Orders::Phase:
+        os << "order_mode: " << "phase" << std::endl;
+      case Orders::Freq:
+        os << "order_mode: " << "freq" << std::endl;
+    }
   }
 };
 
@@ -187,7 +201,7 @@ auto parse_args(int argc, const char** argv) {
         cur++;
         continue;
       }
-       if (name == "--more-than-zero") {
+      if (name == "--more-than-zero") {
         p.more_than_zero = true;
         cur++;
         continue;
@@ -234,6 +248,20 @@ auto parse_args(int argc, const char** argv) {
           }
         } catch (...) {
         }
+        continue;
+      }
+      if (name == "--order-mode") {
+        const auto order_mode_s = std::string(argv[++cur]);
+        if (order_mode_s == std::string("phase")) {
+          p.order_mode = Orders::Phase;
+        } else if (order_mode_s == std::string("freq")) {
+          p.order_mode = Orders::Freq;
+        } else {
+          std::cout << "Invalid order mode: " << order_mode_s << std::endl;
+          std::exit(1);
+        }
+        
+        cur++;
         continue;
       }
 
@@ -365,9 +393,20 @@ int main(int argc, const char** argv) {
   }
   std::vector<research::Metropolice_<network_t>> mcmcs;
   for (int i = 0; i < p.betas.size(); i++) {
-    mcmcs.emplace_back(research::Metropolice(
-        Hamiltonian(p.threshold, PhaseOrder(T, tol, p.init_everytime), p.more_than_zero),
-        SymFluctuate(p.scales[i]), initial, p.betas[i], rng()));
+    switch (p.order_mode) {
+      case Orders::Phase: {
+        mcmcs.emplace_back(research::Metropolice(
+            Hamiltonian(p.threshold, PhaseOrder(T, tol, p.init_everytime),
+                        p.more_than_zero),
+            SymFluctuate(p.scales[i]), initial, p.betas[i], rng()));
+      }
+      case Orders::Freq: {
+        mcmcs.emplace_back(research::Metropolice(
+            Hamiltonian(p.threshold, FreqOrder(T, tol, p.init_everytime),
+                        p.more_than_zero),
+            SymFluctuate(p.scales[i]), initial, p.betas[i], rng()));
+      }
+    }
   }
 
   async_updater_t updater(p.epoch_size, p.num_threads);
